@@ -108,19 +108,23 @@ Write-Host "━━━━━━━━━━━━━━━━━━━━━━�
 Write-Host ""
 Write-Host "  Installed tools:" -ForegroundColor White
 
-$checks = @(
-    @{ Label = 'Git';    Cmd = 'git';  Args = '--version'     },
-    @{ Label = 'Node.js';Cmd = 'node'; Args = '--version'     },
-    @{ Label = 'npm';    Cmd = 'npm';  Args = '--version'     },
-    @{ Label = 'Go';     Cmd = 'go';   Args = 'version'       },
-    @{ Label = 'mise';   Cmd = 'mise'; Args = '--version'     }
-)
-foreach ($t in $checks) {
-    $ver = & $t.Cmd $t.Args 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host ("    {0,-8}: {1}" -f $t.Label, $ver) -ForegroundColor Green
-    } else {
-        Warn "$($t.Label) not on PATH yet — open a new terminal after setup."
+if ($DryRun) {
+    Write-Host "  [dry-run] skipping version checks — nothing was installed" -ForegroundColor Cyan
+} else {
+    $checks = @(
+        @{ Label = 'Git';    Cmd = 'git';  Args = '--version' },
+        @{ Label = 'Node.js';Cmd = 'node'; Args = '--version' },
+        @{ Label = 'npm';    Cmd = 'npm';  Args = '--version' },
+        @{ Label = 'Go';     Cmd = 'go';   Args = 'version'   },
+        @{ Label = 'mise';   Cmd = 'mise'; Args = '--version' }
+    )
+    foreach ($t in $checks) {
+        $ver = & $t.Cmd $t.Args 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ("    {0,-8}: {1}" -f $t.Label, $ver) -ForegroundColor Green
+        } else {
+            Warn "$($t.Label) not on PATH yet — open a new terminal after setup."
+        }
     }
 }
 
