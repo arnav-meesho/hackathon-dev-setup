@@ -1,0 +1,95 @@
+name: Test Windows Setup Script
+
+on:
+  push:
+    paths:
+      - 'scripts/setup.ps1'
+      - '.github/workflows/test-windows.yml'
+  pull_request:
+    paths:
+      - 'scripts/setup.ps1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print commands, do not install)'
+        type: boolean
+        default: true
+
+jobs:
+  test-dry-run:
+    name: Syntax + dry-run
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PowerShell syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            "${{ github.workspace }}/scripts/setup.ps1",
+            [ref]$null,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "Syntax OK" -ForegroundColor Green
+
+      - name: Dry-run setup script
+        shell: pwsh
+        run: scripts/setup.ps1 -DryRun
+
+  test-full-install:
+    name: Full install
+    runs-on: windows-latest
+    # Only runs when manually triggered with dry_run = false
+    if: github.event_name == 'workflow_dispatch' && inputs.dry_run == false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run setup script (full install)
+        shell: pwsh
+        run: scripts/setup.ps1
+
+      - name: Verify installed tools
+        shell: pwsh
+        run: |
+          $failures = @()
+
+          foreach ($check in @(
+            @{ Name = 'git';  Args = '--version' },
+            @{ Name = 'mise'; Args = '--version' }
+          )) {
+            $out = & $check.Name $check.Args 2>&1
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "  $($check.Name): $out" -ForegroundColor Green
+            } else {
+              $failures += $check.Name
+              Write-Host "  $($check.Name): NOT FOUND" -ForegroundColor Red
+            }
+          }
+
+          foreach ($tool in @('node', 'npm', 'go')) {
+            $out = mise exec $tool -- $tool --version 2>&1
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "  $tool (via mise): $out" -ForegroundColor Green
+            } else {
+              $failures += $tool
+              Write-Host "  $tool (via mise): NOT FOUND" -ForegroundColor Red
+            }
+          }
+
+          if ($failures.Count -gt 0) {
+            Write-Error "Missing tools: $($failures -join ', ')"
+            exit 1
+          }
+
+      - name: Upload setup log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-log
+          path: ${{ runner.temp }}/*.log
+          if-no-files-found: ignore
